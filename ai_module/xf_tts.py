@@ -192,6 +192,10 @@ class Speech:
         """
 
         def run():
+            # 如果没有连接 说明超时 需要重新连接
+            if self.connect_status is tts_status_disconnected:
+                self.connect_server()
+
             d = {
                 "common": self.common_args,
                 "business": self.business_args,
