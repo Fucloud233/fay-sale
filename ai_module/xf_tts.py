@@ -44,6 +44,9 @@ class Speech:
             self.APIKey = config_util.key_xf_tts_api_key
             self.APISecret = config_util.key_xf_tts_app_secret
 
+            # 记录与服务端通信的URL
+            self.url = self.create_url()
+
             self.ws = None
             # 用于检测是否全部处理完成的链接
             self.file_url = None
@@ -145,6 +148,7 @@ class Speech:
 
     # 不能够直接连接 每次传输数据时才会连接
     def connect(self):
+        self.connect_server()
         return None
 
     def connect_server(self):
@@ -160,17 +164,14 @@ class Speech:
 
         def run(*args):
             self.connect_status = tts_status_connecting
-
             websocket.enableTrace(False)
-            wsUrl = self.create_url()
-
-            self.ws = websocket.WebSocketApp(wsUrl,
+            self.ws = websocket.WebSocketApp(self.url,
                                              on_message=self.on_message,
                                              on_close=on_close)
             self.ws.on_open = on_open
             self.ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
 
-        # 开启线程等待
+        # 开启线程等待服务器连接
         thread.start_new_thread(run, ())
 
         while True:
@@ -179,9 +180,9 @@ class Speech:
                 break
 
     def close(self):
-
         return None
 
+    # 将文本转语音
     def to_sample(self, text, style):
         """
         文字转语音
@@ -191,8 +192,6 @@ class Speech:
         """
 
         def run():
-            self.connect_server()
-
             d = {
                 "common": self.common_args,
                 "business": self.business_args,
@@ -205,14 +204,8 @@ class Speech:
             self.file_url = None
             self.ws.send(d)
 
-            over_d = {
-                "data": {
-                    "text": "你好",
-                    "status": 2
-                }
-            }
-
-            self.ws.send(json.dumps(over_d))
+            # 在发送完毕之后 重新连接服务器
+            self.connect_server()
 
         thread.start_new_thread(run, ())
 
