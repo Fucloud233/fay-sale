@@ -1,0 +1,66 @@
+{
+    "attribute": {
+        "age": "\u6210\u5e74",
+        "birth": "\u4e2d\u56fd",
+        "constellation": "\u6c34\u74f6\u5ea7",
+        "contact": "qq467665317",
+        "gender": "\u7537",
+        "hobby": "\u8d5a\u94b1",
+        "job": "\u679c\u519c",
+        "name": "\u963f\u6770",
+        "voice": "YUN_FENG",
+        "zodiac": "\u86c7"
+    },
+    "interact": {
+        "QnA": "qa_demo.xlsx",
+        "maxInteractTime": 15,
+        "perception": {
+            "chat": 5,
+            "follow": 5,
+            "gift": 5,
+            "indifferent": 5,
+            "join": 5
+        },
+        "playSound": true
+    },
+    "items": [
+        {
+            "QnA": "qa_demo.xlsx",
+            "demoVideo": "D:\\code\\1.mp4",
+            "enabled": false,
+            "explain": {
+                "character": "\u7ea2\u5bcc\u58eb\u82f9\u679c\u7684\u4f53\u79ef\u5f88\u5927\uff0c\u679c\u8089\u7d27\u5bc6\uff0c\u6bd4\u5176\u4ed6\u5f88\u591a\u82f9\u679c\u53d8\u79cd\u90fd\u8981\u751c\u7f8e\u548c\u6e05\u8106\u3002",
+                "discount": "\u7ea2\u5bcc\u58eb\u4fc3\u9500\u4ef7\u4e00\u65a4\u4e94\u5143",
+                "intro": "\u7ea2\u5bcc\u58eb\u82f9\u679c\u7684\u4f53\u79ef\u5f88\u5927\uff0c\u679c\u8089\u7d27\u5bc6\uff0c\u6bd4\u5176\u4ed6\u5f88\u591a\u82f9\u679c\u53d8\u79cd\u90fd\u8981\u751c\u7f8e\u548c\u6e05\u8106\u3002",
+                "price": "\u7ea2\u5bcc\u58eb\u4ef7\u94b1\u4e00\u65a4\u516b\u5143..",
+                "promise": "\u7ea2\u5bcc\u58eb\u5982\u679c\u51fa\u73b0\u8d28\u91cf\u95ee\u9898\uff0c\u514d\u8d39\u6362\u65b0",
+                "usage": ""
+            },
+            "name": "\u7ea2\u5bcc\u58eb\u82f9\u679c"
+        },
+        {
+            "QnA": "",
+            "demoVideo": "",
+            "enabled": false,
+            "explain": {
+                "character": "\u751c\u7f8e\u6d53\u90c1\u7684\u8461\u8404\u5473\u9053\uff0c\u5e26\u7ed9\u60a8\u72ec\u7279\u7684\u53e3\u611f\u4eab\u53d7\u3002",
+                "discount": "\u7ea2\u63d0\u4fc3\u9500\u4ef7\u4e00\u65a4\u5341\u4e94\u5143",
+                "intro": "\u7ea2\u63d0\u662f\u4e00\u79cd\u4f18\u8d28\u8461\u8404\u54c1\u79cd\uff0c\u65b0\u9c9c\u3001\u751c\u7f8e\uff0c\u53e3\u611f\u6781\u4f73\u3002",
+                "price": "\u7ea2\u63d0\u552e\u4ef7\u4e00\u65a4\u4e8c\u5341\u5143",
+                "promise": "\u7ea2\u63d0\u5047\u4e00\u8d54\u5341",
+                "usage": ""
+            },
+            "name": "\u7ea2\u63d0"
+        }
+    ],
+    "source": {
+        "liveRoom": {
+            "enabled": false,
+            "url": ""
+        },
+        "record": {
+            "device": "\u9635\u5217\u9ea6\u514b\u98ce (AMD Audio Device)",
+            "enabled": true
+        }
+    }
+}
