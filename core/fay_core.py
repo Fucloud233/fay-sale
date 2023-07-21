@@ -1,12 +1,9 @@
 import difflib
 import math
 import os
-import random
-import time
 import wave
 import socket
 
-import eyed3
 from openpyxl import load_workbook
 
 # 适应模型使用
@@ -16,9 +13,11 @@ import fay_booter
 from ai_module import xf_aiui
 from ai_module import xf_ltp
 
+# from ai_module.ms_tts_sdk import Speech
 # 使用科大讯飞 tts API
 from ai_module.xf_tts import Speech
-# from ai_module.ms_tts_sdk import Speech
+from ai_module import stream_trans_flag as st_flag
+
 
 from core import wsa_server, tts_voice, song_player
 from core.interact import Interact
@@ -27,7 +26,6 @@ from scheduler.thread_manager import MyThread
 from utils import util, storer, config_util
 from ai_module import yuan_1_0
 from ai_module import chatgpt
-import pygame
 from utils import config_util as cfg
 import platform
 if platform.system() == "Windows":
@@ -40,6 +38,7 @@ import threading
 import random
 import time
 import pygame
+import pyaudio
 
 # 准备好的音频文件列表
 audio_files = ["audio1.mp3", "audio2.mp3", "audio3.mp3","audio4.mp3"]
@@ -125,6 +124,10 @@ class FeiFei:
         self.last_quest_time = time.time()
         self.playing = False
         self.muting = False
+
+        # 与分帧播放有关的参数
+        self.audio_player = pyaudio.PyAudio()
+        self.stream = None
 
     def __string_similar(self, s1, s2):
         return difflib.SequenceMatcher(None, s1, s2).quick_ratio()
@@ -544,20 +547,30 @@ class FeiFei:
                 if not config_util.config["interact"]["playSound"]: # 非展板播放
                     content = {'Topic': 'Unreal', 'Data': {'Key': 'text', 'Value': self.a_msg}}
                     wsa_server.get_instance().add_cmd(content)
-                result = self.sp.to_sample(self.a_msg, self.__get_mood())
+
+                self.sp.to_sample(self.a_msg, self.__get_mood())
+
+                util.print_cur_time("提交服务器成功", tm)
 
                 while True:
-                    file_url, flag = self.sp.get_message()
-                    audio_thread = threading.Thread(target=self.__send_audio, args=[file_url, styleType, flag])
-                    util.log(1, '合成音频完成. 耗时: {} ms 文件:{}'.format(math.floor((time.time() - tm) * 1000), result))
+                    tm = time.time()
+
+                    # 1. 获得消息
+                    pcm_data, flag = self.sp.get_message()
+                    util.print_cur_time("获取消息成功", tm)
+
+                    # 2. 播放音乐
+                    # audio_thread = threading.Thread(target=self.__send_audio, args=[pcm_data, styleType, flag])
+                    audio_thread = threading.Thread(target=self.__send_audio_xf, args=[pcm_data, flag])
+
+                    if flag == st_flag.stream_trans_start:
+                        util.log(1, '合成音频完成. 耗时: {} ms'.format(math.floor((time.time() - tm) * 1000)))
 
                     # 启动音频播放线程
                     audio_thread.start()
                     audio_thread.join()
 
-                    tm = time.time()
-                    # print("[debug] 接收到消息: file_url {}, flag {}".format(file_url, flag))
-                    if flag:
+                    if flag == st_flag.stream_trans_over:
                         break
 
                 # if result is not None:
@@ -570,10 +583,27 @@ class FeiFei:
         self.speaking = False
         return None
 
-
     def __play_sound(self, file_url):
         pygame.mixer.music.load(file_url)
         pygame.mixer.music.play()
+
+    def __send_audio_xf(self, pcm_data: bytes, flag: int):
+        if config_util.config["interact"]["playSound"]:
+            # 如果 传输则创建流
+            if flag == st_flag.stream_trans_start:
+                self.stream = self.audio_player.open(format=pyaudio.paInt16, channels=1, rate=16000, output=True)
+
+            self.stream.write(pcm_data)
+
+            # 当播放结束时
+            if flag == st_flag.stream_trans_over:
+                self.stream.stop_stream()
+                self.stream.close()
+                self.stream = None
+
+                util.log(1, '结束播放！')
+
+                self.speaking = False
 
     def __send_audio(self, file_url, say_type, is_over: bool):
         try:

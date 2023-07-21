@@ -2,6 +2,7 @@ import codecs
 import os
 import random
 import time
+import math
 
 from core import wsa_server
 from scheduler.thread_manager import MyThread
@@ -37,3 +38,7 @@ def printInfo(level, sender, text, send_time=-1):
 
 def log(level, text):
     printInfo(level, "系统", text)
+
+
+def print_cur_time(text: str, tm):
+    log(1, text + '. 耗时: {} ms'.format(math.floor((time.time() - tm) * 1000)))

@@ -22,6 +22,8 @@ from wsgiref.handlers import format_date_time
 from datetime import datetime
 from time import mktime
 import _thread as thread
+# 用来表示流式
+import ai_module.stream_trans_flag as st_flag
 
 tts_status_disconnected = 0
 tts_status_connecting = 1
@@ -46,15 +48,19 @@ class Speech:
 
             # 记录与服务端通信的URL
             self.url = self.create_url()
-
             self.ws = None
-            # 用于追加保存时的文件链接
-            self.cur_audio = b''
 
-            self.cur_file_urls = []
-            self.cur_index = 0
+            # 记录一个单元包含的帧数
             self.cur_frame_count = 0
             self.total_frame_count = 5
+
+            # 用于追加保存时的文件链接
+            self.cur_audio = b''
+            self.cur_pcm_data = []
+            self.cur_index = 0
+
+            # 标记位
+            self.cur_message_flag = None
             self.is_over = False
 
             self.common_args = {"app_id": self.APPID}
@@ -213,17 +219,25 @@ class Speech:
                 # print("[debug] cur audio:", self.cur_audio)
                 self.cur_frame_count += 1
 
-                # print("[debug] cur frame count: ", self.cur_frame_count)
-
                 if self.cur_frame_count == self.total_frame_count \
                         or status == 2:
-                    # with open(file_url, 'wb') as f:
-                    #     f.write(audio)
 
-                    # 保存文件
-                    file_url = 'samples/sample-' + str(int(time.time() * 1000)) + '.wav'
-                    sound_util.pcm2wav(self.cur_audio, file_url)
-                    self.cur_file_urls.append(file_url)
+                    # 保存当前的pcm数据
+                    # 不保存在硬盘中 保存在内存中
+                    self.cur_pcm_data.append(self.cur_audio)
+
+                    # file_name = 'samples/sample-' + str(int(time.time() * 1000))
+
+                    # (1) 保存pcm文件
+                    # pcm_file_url = file_name + ".pcm"
+                    # with open(pcm_file_url, 'wb') as f:
+                    #     f.write(self.cur_audio)
+
+                    # (2) 保存wav文件
+                    # wav_file_url = file_name + '.wav'
+                    # sound_util.pcm2wav(self.cur_audio, wav_file_url)
+                    # self.cur_file_urls.append(wav_file_url)
+
                     # 重置当前音频
                     self.cur_audio = b''
                     self.cur_frame_count = 0
@@ -233,6 +247,7 @@ class Speech:
                 # 保存文件URL
                 self.cur_frame_count = 0
                 self.is_over = True
+                print("[debug] is_over = True")
 
         except Exception as e:
             errMsg = message["message"]
@@ -241,23 +256,36 @@ class Speech:
             print("sid:%s call error:%s code is:%s" % (sid, errMsg, code))
             print("receive msg,but parse exception:", repr(e))
 
-    def get_message(self) -> (str, bool):
+    def get_message(self) -> (bytes, int):
         # 首先判断还有没有剩余的
+        tm = time.time()
         while True:
-            if len(self.cur_file_urls) > self.cur_index or self.is_over:
+            if self.cur_index < len(self.cur_pcm_data) or self.is_over:
                 break
             time.sleep(0.1)
 
+        util.print_cur_time("等待第一帧完成", tm)
+
         # 有剩余的就返回播放
-        file_url = self.cur_file_urls[self.cur_index]
+        # file_url = self.cur_file_urls[self.cur_index]
+        pcm_data = self.cur_pcm_data[self.cur_index]
 
         # 累加当前坐标
         self.cur_index += 1
 
-        # 如果 已经结束 并且当前的下标已经到头
-        flag = self.is_over and (self.cur_index is len(self.cur_file_urls))
+        # 根据状态返回标记符
+        if self.cur_index == 1:
+            flag = st_flag.stream_trans_start
+        elif self.is_over and (self.cur_index == len(self.cur_pcm_data)):
+            flag = st_flag.stream_trans_over
+            self.cur_index = 0
+            self.cur_pcm_data = []
+        else:
+            flag = st_flag.stream_trans_do
 
-        return file_url, flag
+        # print("[debug] cur_index: {}, flag: {} ".format(self.cur_index, flag))
+
+        return pcm_data, flag
 
 
 if __name__ == '__main__':
