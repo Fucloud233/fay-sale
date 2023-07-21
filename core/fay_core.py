@@ -548,7 +548,7 @@ class FeiFei:
 
                 while True:
                     file_url, flag = self.sp.get_message()
-                    audio_thread = threading.Thread(target=self.__send_audio, args=[file_url, styleType])
+                    audio_thread = threading.Thread(target=self.__send_audio, args=[file_url, styleType, flag])
                     util.log(1, '合成音频完成. 耗时: {} ms 文件:{}'.format(math.floor((time.time() - tm) * 1000), result))
 
                     # 启动音频播放线程
@@ -570,13 +570,12 @@ class FeiFei:
         self.speaking = False
         return None
 
+
     def __play_sound(self, file_url):
-        util.log(1, '播放音频...')
-        util.log(1, '问答处理总时长：{} ms'.format(math.floor((time.time() - self.last_quest_time) * 1000)))
         pygame.mixer.music.load(file_url)
         pygame.mixer.music.play()
 
-    def __send_audio(self, file_url, say_type):
+    def __send_audio(self, file_url, say_type, is_over: bool):
         try:
             # mp3音频长度 (只能处理mp3格式)
             # https://www.cnblogs.com/niansi/p/6854601.html
@@ -620,9 +619,10 @@ class FeiFei:
                     except socket.error as serr:
                         util.log(1,"远程音频输入输出设备已经断开：{}".format(serr))
                     
-            time.sleep(audio_length)
+            time.sleep(audio_length - 0.2)
             wsa_server.get_web_instance().add_cmd({"panelMsg": ""})
-            if config_util.config["interact"]["playSound"]:
+
+            if config_util.config["interact"]["playSound"] and is_over:
                 util.log(1, '结束播放！')
             self.speaking = False
         except Exception as e:
