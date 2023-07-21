@@ -7,7 +7,7 @@
 
 from utils import util, config_util
 from utils import config_util as cfg
-import edge_tts
+from utils import sound_util
 
 import websocket
 import datetime
@@ -48,18 +48,23 @@ class Speech:
             self.url = self.create_url()
 
             self.ws = None
-            # 用于检测是否全部处理完成的链接
-            self.file_url = None
             # 用于追加保存时的文件链接
-            self.cur_file_url = None
+            self.cur_audio = b''
+
+            self.cur_file_urls = []
+            self.cur_index = 0
+            self.cur_frame_count = 0
+            self.total_frame_count = 5
+            self.is_over = False
 
             self.common_args = {"app_id": self.APPID}
             self.business_args = {
                 # 返回mp3格式 aue=lame, sfl=1
-                "aue": "lame",
-                "sfl": 1,
+                # "aue": "lame",
+                # "sfl": 1,
+                "aue": "raw",
                 "auf": "audio/L16;rate=16000",
-                "vcn": "aisjiuxu",
+                "vcn": "x4_lingfeizhe_zl",
                 "tte": "utf8"
             }
 
@@ -107,45 +112,6 @@ class Speech:
                 return data[3]
         return None
 
-    def on_message(self, ws, message):
-        try:
-            message = json.loads(message)
-            code = message["code"]
-            sid = message["sid"]
-            audio = message["data"]["audio"]
-            audio = base64.b64decode(audio)
-            status = message["data"]["status"]
-
-            # print("[debug] msg: ", message)
-
-            if code != 0:
-                errMsg = message["message"]
-                print("sid:%s call error:%s code is:%s" % (sid, errMsg, code))
-            else:
-                # 如果cur_file_url为空 说明没有文件再存存储
-                # 如果不为空 说明上一个文件还没有存储完
-                if self.cur_file_url is None:
-                    file_url = './samples/sample-' + str(int(time.time() * 1000)) + '.mp3'
-                    self.cur_file_url = file_url
-                else:
-                    file_url = self.cur_file_url
-
-                with open(file_url, 'ab') as f:
-                    f.write(audio)
-
-            # 注意 这个函数判断在后面
-            if status == 2:
-                # 保存文件URL
-                self.file_url = self.cur_file_url
-                self.cur_file_url = None
-
-        except Exception as e:
-            errMsg = message["message"]
-            code = message["code"]
-            sid = message["sid"]
-            print("sid:%s call error:%s code is:%s" % (sid, errMsg, code))
-            print("receive msg,but parse exception:", repr(e))
-
     # 不能够直接连接 每次传输数据时才会连接
     def connect(self):
         self.connect_server()
@@ -180,7 +146,9 @@ class Speech:
                 break
 
     def close(self):
-        return None
+        # 如果没有断开连接则返回连接
+        if self.connect_status is tts_status_connected:
+            self.ws.close()
 
     # 将文本转语音
     def to_sample(self, text, style):
@@ -211,18 +179,85 @@ class Speech:
             # 在发送完毕之后 重新连接服务器
             self.connect_server()
 
+        # 修改状态
+        self.cur_file_urls = []
+        self.is_over = False
         thread.start_new_thread(run, ())
 
         # 忙等 等待服务端响应
-        while True:
-            if self.file_url is not None:
-                file_url = self.file_url
-                self.file_url = None
-                return file_url
-            time.sleep(0.1)
+        # if self.file_url is not None:
+        #     file_url = self.file_url
+        #     self.file_url = None
+        #     return file_url
 
         # 如果超时 则返回None
         # return None
+
+    def on_message(self, ws, message):
+        try:
+            message = json.loads(message)
+            code = message["code"]
+            sid = message["sid"]
+            audio = message["data"]["audio"]
+            audio = base64.b64decode(audio)
+            status = message["data"]["status"]
+
+            # print("[debug] msg: ", message)
+
+            if code != 0:
+                errMsg = message["message"]
+                print("sid:%s call error:%s code is:%s" % (sid, errMsg, code))
+            else:
+                # 如果没有计数到头，则累加数据
+                self.cur_audio += audio
+                # print("[debug] cur audio:", self.cur_audio)
+                self.cur_frame_count += 1
+
+                # print("[debug] cur frame count: ", self.cur_frame_count)
+
+                if self.cur_frame_count == self.total_frame_count \
+                        or status == 2:
+                    # with open(file_url, 'wb') as f:
+                    #     f.write(audio)
+
+                    # 保存文件
+                    file_url = 'samples/sample-' + str(int(time.time() * 1000)) + '.wav'
+                    sound_util.pcm2wav(self.cur_audio, file_url)
+                    self.cur_file_urls.append(file_url)
+                    # 重置当前音频
+                    self.cur_audio = b''
+                    self.cur_frame_count = 0
+
+            # 注意 这个函数判断在后面
+            if status == 2:
+                # 保存文件URL
+                self.cur_frame_count = 0
+                self.is_over = True
+
+        except Exception as e:
+            errMsg = message["message"]
+            code = message["code"]
+            sid = message["sid"]
+            print("sid:%s call error:%s code is:%s" % (sid, errMsg, code))
+            print("receive msg,but parse exception:", repr(e))
+
+    def get_message(self) -> (str, bool):
+        # 首先判断还有没有剩余的
+        while True:
+            if len(self.cur_file_urls) > self.cur_index or self.is_over:
+                break
+            time.sleep(0.1)
+
+        # 有剩余的就返回播放
+        file_url = self.cur_file_urls[self.cur_index]
+
+        # 累加当前坐标
+        self.cur_index += 1
+
+        # 如果 已经结束 并且当前的下标已经到头
+        flag = self.is_over and (self.cur_index is len(self.cur_file_urls))
+
+        return file_url, flag
 
 
 if __name__ == '__main__':

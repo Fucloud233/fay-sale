@@ -44,6 +44,8 @@ import pygame
 # 准备好的音频文件列表
 audio_files = ["audio1.mp3", "audio2.mp3", "audio3.mp3","audio4.mp3"]
 audio_flag = 0
+
+
 def play_audio():
     global audio_flag
     if((audio_flag == 1) and (random.random() < 0.5)):
@@ -285,13 +287,11 @@ class FeiFei:
                             audio_flag = 1
                         if answer is None:
                             try:
-
-                                print("1111111111")
                                 # 创建音频播放线程
-                                audio_thread = threading.Thread(target=play_audio)
-
-                                # 启动音频播放线程
-                                audio_thread.start()
+                                # audio_thread = threading.Thread(target=play_audio)
+                                #
+                                # # 启动音频播放线程
+                                # audio_thread.start()
 
                                 wsa_server.get_web_instance().add_cmd({"panelMsg": "思考中..."})
                                 util.log(1, '自然语言处理...')
@@ -312,7 +312,7 @@ class FeiFei:
                                     continue
 
                                 # 等待音频播放线程结束
-                                audio_thread.join()
+                                # audio_thread.join()
 
                             except BaseException as e:
                                 print(e)
@@ -540,18 +540,30 @@ class FeiFei:
                 MyThread(target=storer.storage_live_interact, args=[Interact('Fay', 0, {'user': 'Fay', 'msg': self.a_msg})]).start()
                 util.log(1, '合成音频...')
                 tm = time.time()
-                #文字也推送出去，为了ue5
+                # 文字也推送出去，为了ue5
                 if not config_util.config["interact"]["playSound"]: # 非展板播放
                     content = {'Topic': 'Unreal', 'Data': {'Key': 'text', 'Value': self.a_msg}}
                     wsa_server.get_instance().add_cmd(content)
                 result = self.sp.to_sample(self.a_msg, self.__get_mood())
-                util.log(1, '合成音频完成. 耗时: {} ms 文件:{}'.format(math.floor((time.time() - tm) * 1000), result))
-                
-                
-                if result is not None:     
-                    print("---------------0000--------------")
-                    MyThread(target=self.__send_audio, args=[result, styleType]).start()
-                    return result
+
+                while True:
+                    file_url, flag = self.sp.get_message()
+                    audio_thread = threading.Thread(target=self.__send_audio, args=[file_url, styleType])
+                    util.log(1, '合成音频完成. 耗时: {} ms 文件:{}'.format(math.floor((time.time() - tm) * 1000), result))
+
+                    # 启动音频播放线程
+                    audio_thread.start()
+                    audio_thread.join()
+
+                    tm = time.time()
+                    # print("[debug] 接收到消息: file_url {}, flag {}".format(file_url, flag))
+                    if flag:
+                        break
+
+                # if result is not None:
+                #     print("---------------0000--------------")
+                #     MyThread(target=self.__send_audio, args=[result, styleType]).start()
+                #     return result
         except BaseException as e:
             print("[error] 发生错误", e)
         # print("tts失败！！！！！！！！！！！！！")
@@ -564,54 +576,23 @@ class FeiFei:
         pygame.mixer.music.load(file_url)
         pygame.mixer.music.play()
 
-    def __send_audio3(self, file_url, say_type):
-        try:
-            audio_length = eyed3.load(file_url).info.time_secs #mp3音频长度
-            # with wave.open(file_url, 'rb') as wav_file: #wav音频长度
-            #     audio_length = wav_file.getnframes() / float(wav_file.getframerate())
-            if audio_length <= config_util.config["interact"]["maxInteractTime"] or say_type == "script":
-                if config_util.config["interact"]["playSound"]: # 展板播放
-                    self.__play_sound(file_url)
-                else:#发送音频给ue和socket
-                    content = {'Topic': 'Unreal', 'Data': {'Key': 'audio', 'Value': os.path.abspath(file_url), 'Time': audio_length, 'Type': say_type}}
-                    wsa_server.get_instance().add_cmd(content)
-                    if self.deviceConnect is not None:
-                        try:
-                            self.deviceConnect.send(b'\x00\x01\x02\x03\x04\x05\x06\x07\x08') # 发送音频开始标志，同时也检查设备是否在线
-                            wavfile = open(os.path.abspath(file_url),'rb')
-                            data = wavfile.read(1024)
-                            total = 0
-                            while data:
-                                total += len(data)
-                                self.deviceConnect.send(data)
-                                data = wavfile.read(1024)
-                                time.sleep(0.001)
-                            self.deviceConnect.send(b'\x08\x07\x06\x05\x04\x03\x02\x01\x00')# 发送音频结束标志
-                            util.log(1, "远程音频发送完成：{}".format(total))
-                        except socket.error as serr:
-                            util.log(1,"远程音频输入输出设备已经断开：{}".format(serr))
-
-
-                    
-                wsa_server.get_web_instance().add_cmd({"panelMsg": self.a_msg})
-                time.sleep(audio_length + 0.5)
-                wsa_server.get_web_instance().add_cmd({"panelMsg": ""})
-                if config_util.config["interact"]["playSound"]:
-                    util.log(1, '结束播放！')
-            self.speaking = False
-        except Exception as e:
-            print(e)
-
     def __send_audio(self, file_url, say_type):
         try:
-            audio_length = eyed3.load(file_url).info.time_secs #mp3音频长度
-            # with wave.open(file_url, 'rb') as wav_file: #wav音频长度
-            #     audio_length = wav_file.getnframes() / float(wav_file.getframerate())
-            #     print(audio_length)
+            # mp3音频长度 (只能处理mp3格式)
+            # https://www.cnblogs.com/niansi/p/6854601.html
+            # audio_length = eyed3.load(file_url).info.time_secs
+
+            # wav音频长度
+            with wave.open(file_url, 'rb') as wav_file:
+                audio_length = wav_file.getnframes() / float(wav_file.getframerate())
+                # print(audio_length)
             # if audio_length <= config_util.config["interact"]["maxInteractTime"] or say_type == "script":
-            if config_util.config["interact"]["playSound"]: # 展板播放
+
+            # 展板播放
+            if config_util.config["interact"]["playSound"]:
                 self.__play_sound(file_url)
-            else:#发送音频给ue和socket
+            # 发送音频给ue和socket
+            else:
                 #推送ue
                 content = {'Topic': 'Unreal', 'Data': {'Key': 'audio', 'Value': os.path.abspath(file_url), 'Time': audio_length, 'Type': say_type}}
                 #计算lips
@@ -639,58 +620,13 @@ class FeiFei:
                     except socket.error as serr:
                         util.log(1,"远程音频输入输出设备已经断开：{}".format(serr))
                     
-            time.sleep(audio_length + 0.5)
+            time.sleep(audio_length)
             wsa_server.get_web_instance().add_cmd({"panelMsg": ""})
             if config_util.config["interact"]["playSound"]:
                 util.log(1, '结束播放！')
             self.speaking = False
         except Exception as e:
-            print(e)
-
-
-    def __send_audio2(self, file_url, say_type):
-        try:
-            audio_length = eyed3.load(file_url).info.time_secs #mp3音频长度
-            # with wave.open(file_url, 'rb') as wav_file: #wav音频长度
-            #     audio_length = wav_file.getnframes() / float(wav_file.getframerate())
-            if config_util.config["interact"]["playSound"]: # 展板播放
-                self.__play_sound(file_url)
-            else:#发送音频给ue和socket
-                content = {'Topic': 'Unreal', 'Data': {'Key': 'audio', 'Value': os.path.abspath(file_url), 'Time': audio_length, 'Type': say_type}}
-                #计算lips
-                if platform.system() == "Windows":
-                    lip_sync_generator = LipSyncGenerator()
-                    viseme_list = lip_sync_generator.generate_visemes(os.path.abspath(file_url))
-                    consolidated_visemes = lip_sync_generator.consolidate_visemes(viseme_list)
-                    content["Data"]["Lips"] = consolidated_visemes
-                    # print("-----!!content--------------", content)
-                wsa_server.get_instance().add_cmd(content)
-                if self.deviceConnect is not None:
-                    try:
-                        self.deviceConnect.send(b'\x00\x01\x02\x03\x04\x05\x06\x07\x08') # 发送音频开始标志，同时也检查设备是否在线
-                        wavfile = open(os.path.abspath(file_url),'rb')
-                        data = wavfile.read(1024)
-                        total = 0
-                        while data:
-                            total += len(data)
-                            self.deviceConnect.send(data)
-                            data = wavfile.read(1024)
-                            time.sleep(0.001)
-                        self.deviceConnect.send(b'\x08\x07\x06\x05\x04\x03\x02\x01\x00')# 发送音频结束标志
-                        util.log(1, "远程音频发送完成：{}".format(total))
-                    except socket.error as serr:
-                        util.log(1,"远程音频输入输出设备已经断开：{}".format(serr))
-
-
-                
-            wsa_server.get_web_instance().add_cmd({"panelMsg": self.a_msg})
-            time.sleep(audio_length + 0.5)
-            wsa_server.get_web_instance().add_cmd({"panelMsg": ""})
-            if config_util.config["interact"]["playSound"]:
-                util.log(1, '结束播放！')
-            self.speaking = False
-        except Exception as e:
-            print(e)
+            print("[debug] send_audio:", repr(e))
 
     def __device_socket_keep_alive(self):
         while True:
